@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Crea tu equipo</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="manifest" href="manifest.json">
+  <style>
+    /* Estilos generales y fondo */
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: Arial, sans-serif;
+      background: #333;
+    }
+    /* Cada pantalla se oculta por defecto */
+    .screen {
+      display: none;
+      padding: 20px;
+      max-width: 800px;
+      margin: 40px auto;
+      background: rgba(255,255,255,0.95);
+      border-radius: 10px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.6);
+    }
+    .screen.active {
+      display: block;
+    }
+    h1, h2, h3 {
+      color: #e67e22;
+      text-shadow: 1px 1px 2px #000;
+      text-align: center;
+    }
+    label {
+      display: block;
+      margin: 10px 0 5px;
+      font-weight: bold;
+    }
+    input, select, button {
+      width: 100%;
+      padding: 8px;
+      margin-bottom: 10px;
+      border-radius: 5px;
+      border: 1px solid #ccc;
+      font-size: 1em;
+    }
+    button {
+      background: #e67e22;
+      color: #fff;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+    button:hover {
+      background: #d35400;
+    }
+    .navButtons {
+      display: flex;
+      justify-content: space-between;
+    }
+    .listContainer {
+      background: #bdc3c7;
+      padding: 10px;
+      border-radius: 5px;
+      margin-top: 10px;
+    }
+    .listContainer ul {
+      list-style-type: none;
+      padding: 0;
+    }
+    .listContainer li {
+      margin-bottom: 5px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Pantalla 0: Elección entre Fútbol y Juegos -->
+  <div id="screen0" class="screen active">
+    <h1>¿Qué deseas jugar?</h1>
+    <div class="navButtons">
+      <button id="btn_futbol">Fútbol</button>
+      <button id="btn_juegos">Juegos</button>
+    </div>
+  </div>
+
+  <!-- Pantalla 1: (Solo para Fútbol) Selección del tipo de fútbol -->
+  <div id="screen1" class="screen">
+    <h2>Selecciona el tipo de Fútbol</h2>
+    <label for="s1_tipoFutbol">Tipo de fútbol:</label>
+    <select id="s1_tipoFutbol">
+      <option value="">Selecciona...</option>
+      <option value="futbol11">Fútbol 11</option>
+      <option value="futbol7">Fútbol 7</option>
+      <option value="futbolSala">Fútbol Sala</option>
+    </select>
+    <div class="navButtons">
+      <button id="s1_back">Atrás</button>
+      <button id="s1_next">Siguiente</button>
+    </div>
+  </div>
+
+  <!-- Pantalla 2: (Solo para Fútbol) Número de equipos -->
+  <div id="screen2" class="screen">
+    <h2>Ingresa el número de equipos</h2>
+    <label for="s2_numTeams">Número de equipos:</label>
+    <input type="number" id="s2_numTeams" placeholder="Ej: 2, 3, 4, …">
+    <div class="navButtons">
+      <button id="s2_back">Atrás</button>
+      <button id="s2_next">Siguiente</button>
+    </div>
+  </div>
+
+  <!-- Pantalla 3: (Solo para Fútbol) Nombres de equipos -->
+  <div id="screen3" class="screen">
+    <h2>Ingresa los nombres de los equipos</h2>
+    <div id="teamNamesContainer"></div>
+    <div class="navButtons">
+      <button id="s3_back">Atrás</button>
+      <button id="s3_next">Continuar</button>
+    </div>
+  </div>
+
+  <!-- Pantalla 4: Ingreso de jugadores (para ambos modos) -->
+  <div id="screen4" class="screen">
+    <h2>Ingreso de jugadores</h2>
+    <label for="s4_playerInput">Nombre del jugador:</label>
+    <input type="text" id="s4_playerInput" placeholder="Ej: Juan Pérez">
+    <button id="s4_addPlayer">Añadir jugador</button>
+    <div id="s4_playerList" class="listContainer"></div>
+    <div class="navButtons">
+      <button id="s4_back">Atrás</button>
+      <button id="s4_next">Siguiente</button>
+    </div>
+  </div>
+
+  <!-- Pantalla 5: Resultados -->
+  <div id="screen5" class="screen">
+    <h2>Resultado: Alineación de Equipos</h2>
+    <div id="s5_result"></div>
+    <div class="navButtons">
+      <button id="s5_back">Atrás</button>
+      <button id="s5_regenerate">Regenerar equipos</button>
+      <button id="s5_reset">Borrar todo y volver al inicio</button>
+    </div>
+  </div>
+
+  <!-- Registro del Service Worker (opcional para PWA) -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js')
+          .then(registration => {
+            console.log('Service Worker registrado:', registration.scope);
+          })
+          .catch(error => {
+            console.log('Error al registrar el Service Worker:', error);
+          });
+      });
+    }
+  </script>
+
+  <script>
+    /***********************
+     * VARIABLES GLOBALES Y CONFIGURACIÓN
+     ***********************/
+    // Lista de pantallas (se usarán según el flujo)
+    const screens = ["screen0", "screen1", "screen2", "screen3", "screen4", "screen5"];
+    let config = {
+      tipoFutbol: "",
+      numTeams: 0,
+      teamNames: []
+    };
+    // Para modo "Juegos" se usan valores por defecto
+    const DEFAULT_NUM_TEAMS = 2;
+    const DEFAULT_TEAM_NAMES = ["Equipo 1", "Equipo 2"];
+    // Modo "sin posiciones": lista simple de jugadores
+    let simplePlayerList = [];
+    // Número de titulares para cada equipo según el tipo de fútbol
+    const titularesPorTipo = {
+      "futbol11": 11,
+      "futbol7": 7,
+      "futbolSala": 5,
+      "juegos": 0  // En "juegos" no se definen titulares; se repartirán todos los jugadores
+    };
+
+    /***********************
+     * FUNCIONES DE NAVEGACIÓN
+     ***********************/
+    function showScreen(id) {
+      screens.forEach(scr => {
+        document.getElementById(scr).classList.remove("active");
+      });
+      document.getElementById(id).classList.add("active");
+    }
+
+    /***********************
+     * EVENTOS DE PANTALLAS
+     ***********************/
+    // Pantalla 0: Elección entre Fútbol y Juegos
+    document.getElementById("btn_futbol").addEventListener("click", function() {
+      // Si selecciona Fútbol, seguimos con el proceso completo
+      showScreen("screen1");
+    });
+    document.getElementById("btn_juegos").addEventListener("click", function() {
+      // Si selecciona Juegos, se usan valores por defecto y se salta al ingreso de jugadores
+      config.tipoFutbol = "juegos";
+      config.numTeams = DEFAULT_NUM_TEAMS;
+      config.teamNames = DEFAULT_TEAM_NAMES;
+      showScreen("screen4");
+    });
+
+    // Pantalla 1: (Fútbol) Selección del tipo de fútbol
+    document.getElementById("s1_next").addEventListener("click", function() {
+      config.tipoFutbol = document.getElementById("s1_tipoFutbol").value;
+      if(!config.tipoFutbol) {
+        alert("Selecciona un tipo de fútbol.");
+        return;
+      }
+      showScreen("screen2");
+    });
+    document.getElementById("s1_back").addEventListener("click", function() {
+      showScreen("screen0");
+    });
+
+    // Pantalla 2: (Fútbol) Número de equipos
+    document.getElementById("s2_next").addEventListener("click", function() {
+      config.numTeams = parseInt(document.getElementById("s2_numTeams").value);
+      if(isNaN(config.numTeams) || config.numTeams < 1) {
+        alert("Ingresa un número válido de equipos.");
+        return;
+      }
+      showScreen("screen3");
+      // Generar inputs para nombres de equipos según numTeams
+      let container = document.getElementById("teamNamesContainer");
+      container.innerHTML = "";
+      for(let i = 0; i < config.numTeams; i++){
+        container.innerHTML += `<label for="s3_teamName${i}">Nombre del Equipo ${i+1}:</label>
+          <input type="text" id="s3_teamName${i}" placeholder="Ej: Equipo ${i+1}">`;
+      }
+    });
+    document.getElementById("s2_back").addEventListener("click", function() {
+      document.getElementById("s2_numTeams").value = "";
+      showScreen("screen1");
+    });
+
+    // Pantalla 3: (Fútbol) Nombres de equipos
+    document.getElementById("s3_next").addEventListener("click", function() {
+      config.teamNames = [];
+      for(let i = 0; i < config.numTeams; i++){
+        let name = document.getElementById("s3_teamName"+i).value.trim() || "Equipo " + (i+1);
+        config.teamNames.push(name);
+      }
+      showScreen("screen4");
+    });
+    document.getElementById("s3_back").addEventListener("click", function() {
+      showScreen("screen2");
+    });
+
+    // Pantalla 4: Ingreso de jugadores (para ambos modos: Fútbol o Juegos)
+    document.getElementById("s4_addPlayer").addEventListener("click", function() {
+      let input = document.getElementById("s4_playerInput");
+      let name = input.value.trim();
+      if(name !== "") {
+        simplePlayerList.push(name);
+        input.value = "";
+        updateSimpleList();
+      }
+    });
+    function updateSimpleList() {
+      let list = document.getElementById("s4_playerList");
+      list.innerHTML = "";
+      simplePlayerList.forEach((p, i) => {
+        list.innerHTML += `<div>${i+1}. ${p}</div>`;
+      });
+    }
+    document.getElementById("s4_playerInput").addEventListener("keyup", function(e) {
+      if(e.key === "Enter") document.getElementById("s4_addPlayer").click();
+    });
+    document.getElementById("s4_next").addEventListener("click", function() {
+      if(simplePlayerList.length < config.numTeams) {
+        alert(`Ingresa al menos ${config.numTeams} jugadores.`);
+        return;
+      }
+      generateLineupSimple();
+      showScreen("screen5");
+    });
+    document.getElementById("s4_back").addEventListener("click", function() {
+      simplePlayerList = [];
+      document.getElementById("s4_playerList").innerHTML = "";
+      document.getElementById("s4_playerInput").value = "";
+      // Si es juegos, volvemos a la pantalla 0; si es fútbol, a la pantalla 3.
+      if(config.tipoFutbol === "juegos") {
+        showScreen("screen0");
+      } else {
+        showScreen("screen3");
+      }
+    });
+
+    // Pantalla 5: Resultados
+    document.getElementById("s5_back").addEventListener("click", function() {
+      showScreen("screen4");
+    });
+    document.getElementById("s5_regenerate").addEventListener("click", function() {
+      generateLineupSimple();
+    });
+    document.getElementById("s5_reset").addEventListener("click", function() {
+      location.reload();
+    });
+
+    /***********************
+     * MODO "SIN POSICIONES"
+     ***********************/
+    function generateLineupSimple() {
+      let total = simplePlayerList.length;
+      let pool = simplePlayerList.slice();
+      shuffleArray(pool);
+      // Inicializar equipos vacíos
+      let teams = Array.from({length: config.numTeams}, () => []);
+      // Repartir cada jugador de forma aleatoria entre los equipos con la menor cantidad de jugadores
+      pool.forEach(p => {
+        let counts = teams.map(team => team.length);
+        let minCount = Math.min(...counts);
+        let indices = counts.map((count, idx) => count === minCount ? idx : -1).filter(idx => idx !== -1);
+        let randomIndex = indices[Math.floor(Math.random() * indices.length)];
+        teams[randomIndex].push(p);
+      });
+      config.simpleTeams = teams;
+      displayResultSimple();
+    }
+    function displayResultSimple() {
+      let resultDiv = document.getElementById("s5_result");
+      let html = `<h3>${config.teamNames.join(" vs. ")}</h3>`;
+      for(let i = 0; i < config.numTeams; i++){
+        html += `<h4>${config.teamNames[i]}</h4><ul>`;
+        config.simpleTeams[i].forEach((p, idx) => {
+          html += `<li>${idx+1}. ${p}</li>`;
+        });
+        html += `</ul>`;
+      }
+      resultDiv.innerHTML = html;
+    }
+
+    /***********************
+     * UTILIDADES
+     ***********************/
+    function shuffleArray(arr) {
+      for(let i = arr.length - 1; i > 0; i--) {
+        let j = Math.floor(Math.random() * (i+1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+    }
+  </script>
+</body>
+</html>
